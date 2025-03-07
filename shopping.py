@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import json
 import requests
 import os
 from dotenv import load_dotenv
@@ -7,31 +8,12 @@ from typing import List, Sequence
 from rich.console import Console
 from rich.text import Text
 from rich.markdown import Markdown
-from autogen_agentchat.agents import AssistantAgent, BaseChatAgent
+from autogen_agentchat.agents import AssistantAgent, BaseChatAgent, UserProxyAgent
 from autogen_agentchat.base import Response, TaskResult
+from autogen_agentchat.conditions import TextMentionTermination
 from autogen_agentchat.messages import ChatMessage, StopMessage, TextMessage
-from autogen_agentchat.task import TextMentionTermination
 from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
-from autogen_core.base import CancellationToken
-from autogen_core.components.tools import FunctionTool
-from autogen_ext.models import AzureOpenAIChatCompletionClient
-
-class UserProxyAgent(BaseChatAgent):
-    def __init__(self, name: str) -> None:
-        super().__init__(name, "A human user.")
-
-    @property
-    def produced_message_types(self) -> List[type[ChatMessage]]:
-        return [TextMessage, StopMessage]
-
-    async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
-        user_input = await asyncio.get_event_loop().run_in_executor(None, input, "Enter your response: ")
-        if "TERMINATE" in user_input:
-            return Response(chat_message=StopMessage(content="User has terminated the conversation.", source=self.name))
-        return Response(chat_message=TextMessage(content=user_input, source=self.name))
-
-    async def reset(self, cancellation_token: CancellationToken) -> None:
-        pass
+from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
 
 # Tool to search the web using Bing
@@ -60,7 +42,7 @@ async def get_bing_snippet(query: str) -> str:
         for result in search_results['webPages']['value']:
             result_tuple = (result['name'], result['snippet'], result['url'])
             results_list.append(result_tuple)
-        return tuple(results_list)
+        return json.dumps(results_list)
     else:
         error = f"Error: {response.status_code} - {response.text}"
         print(error)
@@ -141,7 +123,7 @@ async def main() -> None:
 
 
     # Define termination condition
-    termination = TextMentionTermination("TERMINATE")
+    termination = TextMentionTermination("TERMINATE", sources=["orchestrator_agent"])
 
     # Define a team
     agent_team = SelectorGroupChat(
