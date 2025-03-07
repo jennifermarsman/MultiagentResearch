@@ -120,7 +120,7 @@ async def main() -> None:
             },
         ), 
         tools=[get_bing_snippet],
-        system_message="You are responsible for ensuring the article's accuracy.  You can search the internet to verify any relevant facts, and explicitly approve or reject the article based on accuracy, giving your reasoning. You can ask for rewrites if you find inaccuracies."
+        system_message="You are responsible for ensuring the article's accuracy.  You should use the Bing tool to search the internet to verify any relevant facts, and explicitly approve or reject the article based on accuracy, giving your reasoning. You can ask for rewrites if you find inaccuracies."
     )
 
     writer_assistant = AssistantAgent(
@@ -154,7 +154,7 @@ async def main() -> None:
                 "json_output": True,
             },
         ), 
-        system_message="You are a leading a journalism team that conducts research to craft high-quality articles.  You ensure that the output contains an actual well-written article, not just bullet points on what or how to write the article.  If the article isn't to that level yet, ask the writer for a rewrite.  If the team has written a strong article with a clear point that meets the requirements, and has been reviewed by the editor, and has been fact-checked and approved by the verifier agent, then reply 'TERMINATE'."
+        system_message="You are a leading a journalism team that conducts research to craft high-quality articles.  You ensure that the output contains an actual well-written article, not just bullet points on what or how to write the article.  If the article isn't to that level yet, ask the writer for a rewrite.  If the team has written a strong article with a clear point that meets the requirements, and has been reviewed by the editor, and has been fact-checked and approved by the verifier agent, and approved by the user, then reply 'TERMINATE'.  Otherwise state what condition has not yet been met."
     )
 
 
