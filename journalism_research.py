@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import json
 import requests
 import os
 from dotenv import load_dotenv
@@ -7,31 +8,12 @@ from typing import List, Sequence
 from rich.console import Console
 from rich.text import Text
 from rich.markdown import Markdown
-from autogen_agentchat.agents import AssistantAgent, BaseChatAgent
+from autogen_agentchat.agents import AssistantAgent, BaseChatAgent, UserProxyAgent
 from autogen_agentchat.base import Response, TaskResult
 from autogen_agentchat.messages import ChatMessage, StopMessage, TextMessage
-from autogen_agentchat.task import TextMentionTermination
 from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
-from autogen_core.base import CancellationToken
-from autogen_core.components.tools import FunctionTool
-from autogen_ext.models import AzureOpenAIChatCompletionClient
-
-class UserProxyAgent(BaseChatAgent):
-    def __init__(self, name: str) -> None:
-        super().__init__(name, "A human user.")
-
-    @property
-    def produced_message_types(self) -> List[type[ChatMessage]]:
-        return [TextMessage, StopMessage]
-
-    async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
-        user_input = await asyncio.get_event_loop().run_in_executor(None, input, "Enter your response: ")
-        if "TERMINATE" in user_input:
-            return Response(chat_message=StopMessage(content="User has terminated the conversation.", source=self.name))
-        return Response(chat_message=TextMessage(content=user_input, source=self.name))
-
-    async def reset(self, cancellation_token: CancellationToken) -> None:
-        pass
+from autogen_agentchat.conditions import TextMentionTermination
+from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
 
 # Tool to search the web using Bing
@@ -60,7 +42,7 @@ async def get_bing_snippet(query: str) -> str:
         for result in search_results['webPages']['value']:
             result_tuple = (result['name'], result['snippet'], result['url'])
             results_list.append(result_tuple)
-        return tuple(results_list)
+        return json.dumps(results_list)
     else:
         error = f"Error: {response.status_code} - {response.text}"
         print(error)
@@ -137,7 +119,7 @@ async def main() -> None:
                 "json_output": True,
             },
         ), 
-        system_message="You are a high-quality journalist agent who excels at writing a first draft of an article as well as revising the article based on feedback from the other agents.  You can also ask for research to be conducted on certain topics. "
+        system_message="You are a high-quality journalist agent who excels at writing a first draft of an article as well as revising the article based on feedback from the other agents.  Do not just write bullet points on how you would write the article, but actually write it.  You can also ask for research to be conducted on certain topics. "
     )
 
     orchestrator_agent = AssistantAgent(
@@ -163,7 +145,7 @@ async def main() -> None:
 
     # Define a team
     agent_team = SelectorGroupChat(
-        [orchestrator_agent, writer_assistant, editor_agent, verifier_agent, user_proxy, web_search_agent], 
+        [writer_assistant, web_search_agent, editor_agent, verifier_agent, user_proxy, orchestrator_agent,], 
         model_client=AzureOpenAIChatCompletionClient(
             model=azure_model_deployment,
             api_version=azure_api_version,
