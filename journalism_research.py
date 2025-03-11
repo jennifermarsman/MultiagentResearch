@@ -22,39 +22,6 @@ from semantic_kernel.contents.utils.author_role import AuthorRole
 from semantic_kernel.agents.strategies.termination.default_termination_strategy import DefaultTerminationStrategy
 
 
-# Tool to search the web using Bing
-async def get_bing_snippet(query: str) -> str:
-    #Perform a web search using the Bing Web Search API.
-    # Set the parameters for the API request.
-    count = 3       # Number of search results to return
-    params = {
-        'q': query,
-        'count': count,
-    }
-
-    # Set the headers for the API request, including the subscription key.
-    headers = {
-        'Ocp-Apim-Subscription-Key': bing_api_key,
-    }
-
-    # Make the API request.
-    response = requests.get(bing_endpoint, params=params, headers=headers)
-    
-    # Check if the request was successful (HTTP status code 200).
-    if response.status_code == 200:
-        search_results = response.json()
-        # Extract and structure the search results.
-        results_list = []
-        for result in search_results['webPages']['value']:
-            result_tuple = (result['name'], result['snippet'], result['url'])
-            results_list.append(result_tuple)
-        return tuple(results_list)
-    else:
-        error = f"Error: {response.status_code} - {response.text}"
-        print(error)
-        return error
-
-
 def create_kernel() -> Kernel:
     kernel = Kernel()
     # Configure the AzureChatCompletion service using env vars.
@@ -108,35 +75,6 @@ async def main() -> None:
     VERIFIER = "verifier_agent"  
     WEB_SEARCH = "web_search_agent" 
 
-    # Define agents
-    #WEB_SEARCH_NAME = "web_search_agent"
-    #REVIEWER_NAME = "reviewer_agent"
-    #ORCHESTRATOR_NAME = "orchestrator_agent"
-    #WRITER_NAME = "writer_assistant"
-    #EDITOR_NAME = "editor_agent"
-    #VERIFIER_NAME = "verifier_agent"
-    #USER_NAME = "user_proxy"
-
-    '''
-    user_proxy = UserProxyAgent("User")
-
-    agent_reviewer = ChatCompletionAgent(
-        service_id=WEB_SEARCH_NAME,
-        kernel=kernel,
-        name=WEB_SEARCH_NAME,
-        instructions="""
-        Your responsibility is to review and identify how to improve user provided content.
-        If the user has provided input or direction for content already provided, specify how to address this input.
-        Never directly perform the correction or provide an example.
-        Once the content has been updated in a subsequent response, review it again until it is satisfactory.
-
-        RULES:
-        - Only identify suggestions that are specific and actionable.
-        - Verify previous suggestions have been addressed.
-        - Never repeat previous suggestions.
-        """,
-    )
-    '''
     # Open questions:
     # 1. How to create a user proxy agent?
     # 2. Non round robin selection strategy?
@@ -235,10 +173,7 @@ async def main() -> None:
         {{{{$lastmessage}}}}
         """
     )
-    # Removed from AI-generated selection function:
-    # If the RESPONSE is from user input, select {ORCHESTRATOR}.
-    # Otherwise follow a round-robin order starting from {ORCHESTRATOR}.
-
+    
     # TODO: do we still need the orchestrator or is the termination function enough?  Can it ask for changes and be heard by the other agents?
     
     
