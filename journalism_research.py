@@ -18,10 +18,6 @@ from semantic_kernel.functions.kernel_function_from_prompt import KernelFunction
 from semantic_kernel.contents.chat_message_content import ChatMessageContent
 from semantic_kernel.contents.utils.author_role import AuthorRole
 
-# TODO: IS the following used?
-from semantic_kernel.agents.strategies.termination.default_termination_strategy import DefaultTerminationStrategy
-
-
 def create_kernel() -> Kernel:
     kernel = Kernel()
     # Configure the AzureChatCompletion service using env vars.
@@ -34,6 +30,7 @@ def create_kernel() -> Kernel:
     kernel.add_service(azure_service)
     return kernel
 
+'''
 def create_bing_kernel() -> Kernel:
     kernel = Kernel()
     azure_service = AzureChatCompletion(
@@ -52,23 +49,32 @@ def create_bing_kernel() -> Kernel:
     # TODO: see https://learn.microsoft.com/en-us/semantic-kernel/concepts/text-search/out-of-the-box-textsearch/bing-textsearch?pivots=programming-language-python
 
     return kernel
-
+'''
 
 async def main() -> None:
-    # Load configuration from environment variables.
+
+    # Load configuration from environment variables.  NOTE: Semantic Kernel uses Pydantic settings, so this is not needed, but we do it for clarity.
     load_dotenv()
     global azure_oai_endpoint, azure_oai_key, azure_model_deployment, azure_api_version, bing_endpoint, bing_api_key
-    azure_oai_endpoint = os.getenv("AZURE_OPENAI_API_ENDPOINT")
+    azure_oai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
     azure_oai_key = os.getenv("AZURE_OPENAI_API_KEY")
-    azure_model_deployment = os.getenv("AZURE_MODEL_DEPLOYMENT")
+    azure_model_deployment = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME")
     azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION")
     bing_endpoint = os.getenv("BING_ENDPOINT")
     bing_api_key = os.getenv("BING_API_KEY")
 
     # Create a semantic kernel instance.  
-    kernel = create_kernel()  
+    kernel = create_kernel()
+    
+    # Create an Azure OpenAI service instance.  In this example, I am using the same service for each agent, but you can use different services per agent if needed.
+    azure_service = AzureChatCompletion(
+        deployment_name=azure_model_deployment,
+        api_version=azure_api_version,
+        endpoint=azure_oai_endpoint,
+        api_key=azure_oai_key,
+    )
 
-    # Define agent names (and matching service_ids)  
+    # Define agent names 
     ORCHESTRATOR = "orchestrator_agent"  
     WRITER = "writer_assistant"  
     EDITOR = "editor_agent"  
@@ -83,45 +89,38 @@ async def main() -> None:
     # Create ChatCompletionAgent instances for each role. 
 
     web_search_agent = ChatCompletionAgent(
-        service_id=WEB_SEARCH,
-        kernel=create_bing_kernel(),
+        service=azure_service,
         name=WEB_SEARCH,
         instructions="""  
-            You are a web search agent. You have access to Bing search (via the BingSearch.search function) to retrieve relevant
+            You are a web search agent. You can issue queries to Bing search (via the BingSearchSkill.search function) to retrieve relevant
             information to conduct research, to fact-check, and to answer open questions. Provide concise search results.
             """,
-        #instructions="You are an agent who can search the web to conduct research and answer open questions.",
-        #functions=[get_bing_snippet],
         description="An agent who can search the web to conduct research and answer open questions",
-        #skills=[get_bing_snippet],
+        plugins=[BingSearchSkill()],
     )
 
     editor_agent = ChatCompletionAgent(  
-        service_id=EDITOR,  
-        kernel=kernel,  
+        service=azure_service, 
         name=EDITOR,  
         instructions="""  
         You are an expert editor of written articles. Read the article carefully and suggest actionable improvements
         and additional topics that should be researched to improve the article's quality.
         """,
-        # old system_message="You are an expert editor.  You carefully read an article and make suggestions for improvements and suggest additional topics that should be researched to improve the article quality."
     )
 
     verifier_agent = ChatCompletionAgent(  
-        service_id=VERIFIER,  
-        kernel=create_bing_kernel(),  
+        service=azure_service,  
         name=VERIFIER,  
         instructions="""  
             You are responsible for ensuring the article's accuracy.  Verify that the article is factually correct and well-written. Use available research
             tools if needed and ask for rewrites if inaccuracies are found.
             """,
-        # tools=[get_bing_snippet],
+        plugins=[BingSearchSkill()],
         # old system_message="You are responsible for ensuring the article's accuracy.  You can search the internet to verify any relevant facts, and explicitly approve or reject the article based on accuracy, giving your reasoning. You can ask for rewrites if you find inaccuracies."
     )
 
     writer_assistant = ChatCompletionAgent(  
-        service_id=WRITER,  
-        kernel=kernel,  
+        service=azure_service,  
         name=WRITER,  
         instructions="""  
         You are a high-quality journalist agent who excels at writing a first draft of an article as well as revising it
@@ -131,8 +130,7 @@ async def main() -> None:
     )
 
     orchestrator_agent = ChatCompletionAgent(  
-        service_id=ORCHESTRATOR,  
-        kernel=kernel,  
+        service=azure_service,  
         name=ORCHESTRATOR,  
         instructions="""  
         You are leading a journalism team that conducts research to craft high-quality, well-written articles.
@@ -145,7 +143,7 @@ async def main() -> None:
 
     # Define a selection function (using a Kernel prompt) to choose the next speaker.  
     selection_function = KernelFunctionFromPrompt(  
-        function_name="selection",  
+        function_name="selection",
         prompt=f"""  
         Examine the provided RESPONSE and choose the next participant.
         State only the name of the chosen participant without explanation.
@@ -202,7 +200,7 @@ async def main() -> None:
     chat = AgentGroupChat(
         agents=[orchestrator_agent, writer_assistant, editor_agent, verifier_agent, web_search_agent],
         selection_strategy=KernelFunctionSelectionStrategy(
-            initial_agent=orchestrator_agent,
+            initial_agent=writer_assistant,
             function=selection_function,
             kernel=kernel,
             result_parser=lambda result: str(result.value[0]).strip() if result.value and result.value[0] is not None else WRITER,
@@ -223,8 +221,12 @@ async def main() -> None:
     # Prepare the initial task prompt. In this case we ask the user to describe the article.
     task_prompt = "Please describe the article you want to write. You may include some bullet points. Today's date is " + str(datetime.date.today())
 
-    # Add the task prompt as a user message to the chat history.
-    await chat.add_chat_message(ChatMessageContent(role=AuthorRole.USER, content=task_prompt))
+    # Add the task prompt as a message to the chat history.
+    await chat.add_chat_message(ChatMessageContent(role=AuthorRole.ASSISTANT, content=task_prompt))
+
+    # Get the user's input for the article description.
+    user_input = input(task_prompt + "\n> ").strip()
+    await chat.add_chat_message(ChatMessageContent(role=AuthorRole.USER, content=user_input))
 
     # Create a rich console to stream conversation results.
     console = Console()
@@ -245,4 +247,3 @@ async def main() -> None:
         console.print("\n[bold green]Conversation terminated.[/bold green]")
 
 asyncio.run(main())
-
