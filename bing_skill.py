@@ -6,8 +6,10 @@ from semantic_kernel.functions.kernel_function_decorator import kernel_function
 
 
 class BingSearchSkill:
-    @kernel_function(description="Search Bing for a query and return search results", name="search")
+    @kernel_function(description="Performs a web search of the provided query using the Bing Web Search API and returns the results", name="search")
     async def search(self, query: str) -> str:
+        """Performs a web search of the provided query using the Bing Web Search API and returns the results."""
+
         load_dotenv()
         bing_endpoint = os.getenv("BING_ENDPOINT")
         bing_api_key = os.getenv("BING_API_KEY")

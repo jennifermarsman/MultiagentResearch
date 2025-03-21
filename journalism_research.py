@@ -112,11 +112,11 @@ async def main() -> None:
         service=azure_service,  
         name=VERIFIER,  
         instructions="""  
-            You are responsible for ensuring the article's accuracy.  Verify that the article is factually correct and well-written. Use available research
-            tools if needed and ask for rewrites if inaccuracies are found.
+            You are responsible for ensuring the article's accuracy. You can search the internet using the BingSearchSkill.search tool to verify 
+            any relevant facts, and explicitly approve or reject the article based on accuracy, giving your reasoning. You should ask for rewrites 
+            if you find inaccuracies.
             """,
         plugins=[BingSearchSkill()],
-        # old system_message="You are responsible for ensuring the article's accuracy.  You can search the internet to verify any relevant facts, and explicitly approve or reject the article based on accuracy, giving your reasoning. You can ask for rewrites if you find inaccuracies."
     )
 
     writer_assistant = ChatCompletionAgent(  
@@ -124,9 +124,9 @@ async def main() -> None:
         name=WRITER,  
         instructions="""  
         You are a high-quality journalist agent who excels at writing a first draft of an article as well as revising it
-        based on feedback. Follow the directions provided by your teammates and produce a well-written article.
+        based on feedback. Follow the directions provided by your teammates and produce a well-written article. You can also 
+        ask for research to be conducted on certain topics if needed.
         """,
-        # old system_message="You are a high-quality journalist agent who excels at writing a first draft of an article as well as revising the article based on feedback from the other agents.  You can also ask for research to be conducted on certain topics. "
     )
 
     orchestrator_agent = ChatCompletionAgent(  
@@ -134,10 +134,12 @@ async def main() -> None:
         name=ORCHESTRATOR,  
         instructions="""  
         You are leading a journalism team that conducts research to craft high-quality, well-written articles.
-        Ensure that the final article meets rigorous standards. If the article has been reviewed by your teammates
-        (the editor and verifier) and is complete, reply with "TERMINATE". Otherwise, instruct the next agent accordingly.
+        Ensure that the output contains an actual well-written article, not just bullet points on what or how to write the article.  If 
+        the article isn't to that level yet, ask the writer for a rewrite.  
+        If the team has written a strong article with a clear point that meets the requirements, and has been reviewed by the editor, 
+        and has been fact-checked and approved by the verifier agent, then reply 'TERMINATE'.
+        Otherwise, state what of the above requirements is missing or could be improved to instruct the next agent accordingly.
         """,
-        # old system_message="You are a leading a journalism team that conducts research to craft high-quality articles.  You ensure that the output contains an actual well-written article, not just bullet points on what or how to write the article.  If the article isn't to that level yet, ask the writer for a rewrite.  If the team has written a strong article with a clear point that meets the requirements, and has been reviewed by the editor, and has been fact-checked and approved by the verifier agent, then reply 'TERMINATE'."
     )
 
 
@@ -147,19 +149,19 @@ async def main() -> None:
         prompt=f"""  
         Examine the provided RESPONSE and choose the next participant.
         State only the name of the chosen participant without explanation.
-        Never choose the participant named in the RESPONSE.
+        Never choose the participant who has just spoken named in the RESPONSE.
 
         Choose only from these participants:
 
-        {WRITER}
+        {WRITER} - high-quality journalist agent who excels at writing a first draft of an article as well as revising the article based on feedback from the other agents
 
-        {WEB_SEARCH}
+        {WEB_SEARCH} - agent who can search the web to conduct research and answer open questions
 
-        {EDITOR}
+        {EDITOR} - expert editor of written articles who reads the article carefully and suggests actionable improvements to improve the article's quality
 
-        {VERIFIER}
+        {VERIFIER} - agent that is responsible for ensuring the article's accuracy who can search the internet to verify any relevant facts, and approve or reject the article
 
-        {ORCHESTRATOR}
+        {ORCHESTRATOR} - agent who monitors progress of the team and determines when the article is complete
 
         Rules:
 
