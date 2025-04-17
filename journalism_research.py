@@ -1,197 +1,166 @@
-import asyncio
 import datetime
 import json
-import requests
 import os
 from dotenv import load_dotenv
-from typing import List, Sequence
+from typing import List
 from rich.console import Console
 from rich.text import Text
 from rich.markdown import Markdown
-from autogen_agentchat.agents import AssistantAgent, BaseChatAgent, UserProxyAgent
-from autogen_agentchat.base import Response, TaskResult
-from autogen_agentchat.messages import ChatMessage, StopMessage, TextMessage
-from autogen_agentchat.teams import SelectorGroupChat, RoundRobinGroupChat
-from autogen_agentchat.conditions import TextMentionTermination
-from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+
+# Azure AI Project imports
+from azure.ai.projects import AIProjectClient
+from azure.ai.projects.models import MessageRole, BingGroundingTool
+from azure.identity import DefaultAzureCredential
 
 
-# Tool to search the web using Bing
-async def get_bing_snippet(query: str) -> str:
-    #Perform a web search using the Bing Web Search API.
-    # Set the parameters for the API request.
-    count = 3       # Number of search results to return
-    params = {
-        'q': query,
-        'count': count,
-    }
-
-    # Set the headers for the API request, including the subscription key.
-    headers = {
-        'Ocp-Apim-Subscription-Key': bing_api_key,
-    }
-
-    # Make the API request.
-    response = requests.get(bing_endpoint, params=params, headers=headers)
-    
-    # Check if the request was successful (HTTP status code 200).
-    if response.status_code == 200:
-        search_results = response.json()
-        # Extract and structure the search results.
-        results_list = []
-        for result in search_results['webPages']['value']:
-            result_tuple = (result['name'], result['snippet'], result['url'])
-            results_list.append(result_tuple)
-        return json.dumps(results_list)
-    else:
-        error = f"Error: {response.status_code} - {response.text}"
-        print(error)
-        return error
-
-
-async def main() -> None:
-    # Define agents
-    user_proxy = UserProxyAgent("User")
-
-    web_search_agent = AssistantAgent(
-        name="web_search_agent",
-        description="An agent who can search the web to conduct research and answer open questions",
-        model_client=AzureOpenAIChatCompletionClient(
-            model=azure_model_deployment,
-            api_version=azure_api_version,
-            azure_endpoint=azure_oai_endpoint,
-            api_key=azure_oai_key,
-            model_capabilities={
-                "vision": True,
-                "function_calling": True,
-                "json_output": True,
-            },
-        ),
-        tools=[get_bing_snippet],
-    )
-    
-    editor_agent = AssistantAgent(
-        name = "editor", 
-        description="An expert editor of written articles who can read an article and make suggestions for improvements and additional topics that should be researched",
-        model_client=AzureOpenAIChatCompletionClient(
-            model=azure_model_deployment,
-            api_version=azure_api_version,
-            azure_endpoint=azure_oai_endpoint,
-            api_key=azure_oai_key,
-            model_capabilities={
-                "vision": True,
-                "function_calling": True,
-                "json_output": True,
-            },
-        ), 
-        system_message="You are an expert editor.  You carefully read an article and make suggestions for improvements and suggest additional topics that should be researched to improve the article quality."
+# Define function to create a journalism research agent
+def create_journalism_research_agent():
+    # Initialize the AI Project client
+    project_client = AIProjectClient.from_connection_string(
+        credential=DefaultAzureCredential(),
+        conn_str=os.environ["PROJECT_CONNECTION_STRING"],
     )
 
-    verifier_agent = AssistantAgent(
-        name = "verifier_agent", 
-        description="A responsible agent who will verify the facts and ensure that the article is accurate and well-written",
-        model_client=AzureOpenAIChatCompletionClient(
-            model=azure_model_deployment,
-            api_version=azure_api_version,
-            azure_endpoint=azure_oai_endpoint,
-            api_key=azure_oai_key,
-            model_capabilities={
-                "vision": True,
-                "function_calling": True,
-                "json_output": True,
-            },
-        ), 
-        tools=[get_bing_snippet],
-        system_message="You are responsible for ensuring the article's accuracy.  You should use the Bing tool to search the internet to verify any relevant facts, and explicitly approve or reject the article based on accuracy, giving your reasoning. You can ask for rewrites if you find inaccuracies."
+    # Get Bing connection
+    bing_connection = project_client.connections.get(connection_name=os.environ["BING_CONNECTION_NAME"])
+    conn_id = bing_connection.id
+    print(f"Using Bing connection ID: {conn_id}")
+
+    # Initialize Bing grounding tool
+    bing = BingGroundingTool(connection_id=conn_id)
+
+    # Create agents with specific roles
+    # Create writer agent
+    writer_agent = project_client.agents.create_agent(
+        model=os.environ["MODEL_DEPLOYMENT_NAME"],
+        name="writer_assistant",
+        instructions="You are a high-quality journalist agent who excels at writing a first draft of an article as well as revising the article based on feedback from the other agents. Do not just write bullet points on how you would write the article, but actually write it. You can also ask for research to be conducted on certain topics.",
+        tools=bing.definitions,
+        headers={"x-ms-enable-preview": "true"},
     )
+    print(f"Created writer agent, ID: {writer_agent.id}")
 
-    writer_assistant = AssistantAgent(
-        name = "writer_assistant", 
-        description="A high-quality journalist agent who excels at writing a first draft of an article as well as revising the article based on feedback from the other agents",
-        model_client=AzureOpenAIChatCompletionClient(
-            model=azure_model_deployment,
-            api_version=azure_api_version,
-            azure_endpoint=azure_oai_endpoint,
-            api_key=azure_oai_key,
-            model_capabilities={
-                "vision": True,
-                "function_calling": True,
-                "json_output": True,
-            },
-        ), 
-        system_message="You are a high-quality journalist agent who excels at writing a first draft of an article as well as revising the article based on feedback from the other agents.  Do not just write bullet points on how you would write the article, but actually write it.  You can also ask for research to be conducted on certain topics. "
+    # Create editor agent
+    editor_agent = project_client.agents.create_agent(
+        model=os.environ["MODEL_DEPLOYMENT_NAME"],
+        name="editor_agent",
+        instructions="You are an expert editor. You carefully read an article and make suggestions for improvements and suggest additional topics that should be researched to improve the article quality.",
+        tools=bing.definitions,
+        headers={"x-ms-enable-preview": "true"},
     )
+    print(f"Created editor agent, ID: {editor_agent.id}")
 
-    orchestrator_agent = AssistantAgent(
-        name = "orchestrator_agent", 
-        description="Team leader who verifies when the article is complete and meets all requirements",
-        model_client=AzureOpenAIChatCompletionClient(
-            model=azure_model_deployment,
-            api_version=azure_api_version,
-            azure_endpoint=azure_oai_endpoint,
-            api_key=azure_oai_key,
-            model_capabilities={
-                "vision": True,
-                "function_calling": True,
-                "json_output": True,
-            },
-        ), 
-        system_message="You are a leading a journalism team that conducts research to craft high-quality articles.  You ensure that the output contains an actual well-written article, not just bullet points on what or how to write the article.  If the article isn't to that level yet, ask the writer for a rewrite.  If the team has written a strong article with a clear point that meets the requirements, and has been reviewed by the editor, and has been fact-checked and approved by the verifier agent, and approved by the user, then reply 'TERMINATE'.  Otherwise state what condition has not yet been met."
+    # Create verifier agent
+    verifier_agent = project_client.agents.create_agent(
+        model=os.environ["MODEL_DEPLOYMENT_NAME"],
+        name="verifier_agent",
+        instructions="You are responsible for ensuring the article's accuracy. You should use the Bing tool to search the internet to verify any relevant facts, and explicitly approve or reject the article based on accuracy, giving your reasoning. You can ask for rewrites if you find inaccuracies.",
+        tools=bing.definitions,
+        headers={"x-ms-enable-preview": "true"},
     )
+    print(f"Created verifier agent, ID: {verifier_agent.id}")
 
-
-    # Define termination condition
-    termination = TextMentionTermination("TERMINATE")
-
-    # Define a team
-    agent_team = SelectorGroupChat(
-        [writer_assistant, web_search_agent, editor_agent, verifier_agent, user_proxy, orchestrator_agent,], 
-        model_client=AzureOpenAIChatCompletionClient(
-            model=azure_model_deployment,
-            api_version=azure_api_version,
-            azure_endpoint=azure_oai_endpoint,
-            api_key=azure_oai_key,
-            model_capabilities={
-                "vision": True,
-                "function_calling": True,
-                "json_output": True,
-            },
-        ),
-        termination_condition=termination
+    # Create orchestrator agent
+    orchestrator_agent = project_client.agents.create_agent(
+        model=os.environ["MODEL_DEPLOYMENT_NAME"],
+        name="orchestrator_agent",
+        instructions="You are leading a journalism team that conducts research to craft high-quality articles. You ensure that the output contains an actual well-written article, not just bullet points on what or how to write the article. If the article isn't to that level yet, ask the writer for a rewrite. If the team has written a strong article with a clear point that meets the requirements, and has been reviewed by the editor, and has been fact-checked and approved by the verifier agent, then respond with a completion message.",
+        tools=bing.definitions,
+        headers={"x-ms-enable-preview": "true"},
     )
+    print(f"Created orchestrator agent, ID: {orchestrator_agent.id}")
 
-    # Define the task prompt
-    task_prompt = "Ask the user to describe the article they want to write. They can include some starting bullet points if they want. Today's date is " + str(datetime.date.today())
+    return project_client, writer_agent, editor_agent, verifier_agent, orchestrator_agent
 
-    # Run the team and stream messages
-    stream = agent_team.run_stream(task=task_prompt)
-    console = Console()
-    async for response in stream:
-        #print(response)
-        text = Text()
-        if not isinstance(response, TaskResult):
-            # Print the agent name in color
-            text.append(response.source, style="bold magenta")
-            text.append(": ")
-            console.print(text)
-            if isinstance(response, str):
-                md = Markdown(response.content)
-                console.print(md)
-            else:
-                console.print(response.content)
-        else:
-            console.print(response.stop_reason)
 
+def main():
+    # Create agents
+    project_client, writer_agent, editor_agent, verifier_agent, orchestrator_agent = create_journalism_research_agent()
+
+    # Create a thread for communication
+    with project_client:
+        thread = project_client.agents.create_thread()
+        print(f"Created thread, ID: {thread.id}")
+
+        # Ask user for article topic
+        console = Console()
+        console.print("Welcome to the journalism research assistant.", style="bold green")
+        console.print("Describe the article you want to write. You can optionally add some starting points.", style="italic")
+        user_input = input("> ")
+
+        # Add today's date to the user input
+        today_date = datetime.datetime.now().strftime("%d %B %Y")
+        full_prompt = f"Article topic: {user_input}\nDate: {today_date}"
+
+        # Create initial message from user
+        message = project_client.agents.create_message(
+            thread_id=thread.id,
+            role=MessageRole.USER,
+            content=full_prompt,
+        )
+        print(f"Created message, ID: {message.id}")
+
+        # Process journalism workflow with the agents
+        console.print("\n--- Start research and writing process ---\n", style="bold blue")
+        
+        # Step 1: Writer creates initial draft
+        console.print("Step 1: Writer agent creates a first draft...", style="bold magenta")
+        run = project_client.agents.create_and_process_run(thread_id=thread.id, agent_id=writer_agent.id)
+        print_agent_response(project_client, thread.id, console, "Writer")
+        
+        # Step 2: Editor reviews and provides feedback
+        console.print("\nStep 2: Editor agent reviews the draft...", style="bold magenta")
+        run = project_client.agents.create_and_process_run(thread_id=thread.id, agent_id=editor_agent.id)
+        print_agent_response(project_client, thread.id, console, "Editor")
+        
+        # Step 3: Writer improves based on feedback
+        console.print("\nStep 3: Writer agent improves the article...", style="bold magenta")
+        run = project_client.agents.create_and_process_run(thread_id=thread.id, agent_id=writer_agent.id)
+        print_agent_response(project_client, thread.id, console, "Writer")
+        
+        # Step 4: Verifier checks facts
+        console.print("\nStep 4: Verifier agent checks the facts...", style="bold magenta")
+        run = project_client.agents.create_and_process_run(thread_id=thread.id, agent_id=verifier_agent.id)
+        print_agent_response(project_client, thread.id, console, "Verifier")
+        
+        # Step 5: Writer makes final adjustments
+        console.print("\nStep 5: Writer agent makes the final adjustments...", style="bold magenta")
+        run = project_client.agents.create_and_process_run(thread_id=thread.id, agent_id=writer_agent.id)
+        print_agent_response(project_client, thread.id, console, "Writer")
+        
+        # Step 6: Orchestrator provides final evaluation
+        console.print("\nStep 6: Orchestrator agent provides the final evaluation...", style="bold magenta")
+        run = project_client.agents.create_and_process_run(thread_id=thread.id, agent_id=orchestrator_agent.id)
+        print_agent_response(project_client, thread.id, console, "Orchestrator")
+        
+        # Cleanup
+        console.print("\n--- Cleaning up resources ---", style="bold blue")
+        project_client.agents.delete_agent(writer_agent.id)
+        project_client.agents.delete_agent(editor_agent.id)
+        project_client.agents.delete_agent(verifier_agent.id)
+        project_client.agents.delete_agent(orchestrator_agent.id)
+        print("Agents removed")
+
+# Helper function to print agent responses
+def print_agent_response(project_client, thread_id, console, agent_role):
+    response_message = project_client.agents.list_messages(thread_id=thread_id).get_last_message_by_role(
+        MessageRole.AGENT
+    )
+    if response_message:
+        console.print(f"\n[bold magenta]{agent_role}[/bold magenta]: ")
+        for text_message in response_message.text_messages:
+            console.print(Markdown(text_message.text.value))
+        for annotation in response_message.url_citation_annotations:
+            console.print(f"[italic]Source: [{annotation.url_citation.title}]({annotation.url_citation.url})[/italic]")
 
 
 # Load env variables
 load_dotenv()
-azure_oai_endpoint = os.getenv("AZURE_OPENAI_API_ENDPOINT")
-azure_oai_key = os.getenv("AZURE_OPENAI_API_KEY")
-azure_model_deployment = os.getenv("AZURE_MODEL_DEPLOYMENT")
-azure_api_version = os.getenv("AZURE_OPENAI_API_VERSION")
-bing_endpoint = os.getenv("BING_ENDPOINT")
-bing_api_key = os.getenv("BING_API_KEY") 
+
+# Azure AI Project variables
+os.environ["PROJECT_CONNECTION_STRING"] = os.getenv("PROJECT_CONNECTION_STRING", "")
+os.environ["MODEL_DEPLOYMENT_NAME"] = os.getenv("AZURE_MODEL_DEPLOYMENT", "")
+os.environ["BING_CONNECTION_NAME"] = os.getenv("BING_CONNECTION_NAME", "")
 
 # Run
-asyncio.run(main())
+main()
