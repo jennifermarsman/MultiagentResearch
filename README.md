@@ -12,7 +12,7 @@ This repo contains two different scenarios, both implemented using multiple agen
 ## Setup
 You will first need to create an [Azure AI Foundry](https://portal.azure.com/#create/Microsoft.CognitiveServicesOpenAI) resource with a hub and project. Copy the project connection string and update the .env file with it.
 
-To use the Bing Grounding API, go to "Connected Resources" in the project blade and add a connection to the Bing resource. Fetch the name of the Bing resource and copy/paste it into the .env file as well.
+To use the Bing Grounding API, go to "Connected Resources" in the project blade and add a connection to the Bing resource. Fetch the name of the Bing resource and copy/paste it into the .env file as well. Make sure you have deployed a Grounding with Bing resource in Azure first. 
 
 Finally, use the following commands in a python environment (such as an Anaconda prompt window) to set up your environment. This creates and activates an environment and installs the required packages. For subsequent runs after the initial install, you will only need to activate the environment and then run the python script.
 
