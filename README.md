@@ -2,7 +2,7 @@
 An exploration of using multiple agents collaborating to perform research
 
 ## What is changed when compared to the original repo? 
-This fork contains a change from Bing v7 which is not available anymore to the new Bing Grounding API. The original repo used the v7 API which is now deprecated. The new API is a bit different, but the functionality is similar. Also, as the new Bing Grounding API can only be used via the AI Agent Service the code has been modified to use the Azure AI Foundry service. Also, as AI Agent Service is used as alternative to AutoGen as a result. 
+This fork contains a change from Bing v7 which is not available anymore to the new Bing Grounding API. The original repo used the v7 API which is now deprecated. The new API is a bit different, but the functionality is similar. Also, as the new Bing Grounding API can only be used via the AI Agent Service the code has been modified to use the Azure AI Foundry service. Also, AI Agent Service is used as alternative to AutoGen as a result. 
 
 To Do: 
 - Add Semantic Kernel
