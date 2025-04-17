@@ -1,6 +1,9 @@
 # Multiagent Research
 An exploration of using multiple agents collaborating to perform research
 
+## What is changed when compared to the original repo? 
+This fork contains a change from Bing v7 which is not available anymore to the new Bing Grounding API. The original repo used the v7 API which is now deprecated. The new API is a bit different, but the functionality is similar. Also, as the new Bing Grounding API can only be used via the AI Agent Service the code has been modified to use the Azure AI Foundry service. The original repo used the OpenAI API directly, but this is not possible with the new Bing Grounding API.
+
 ## Scenarios
 This repo contains two different scenarios, both implemented using multiple agents collaborating using AutoGen 0.4.  
 + **journalism_research.py** - run this script for a group of agents to conduct online research to craft a news article
