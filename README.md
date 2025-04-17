@@ -7,9 +7,9 @@ This repo contains two different scenarios, both implemented using multiple agen
 + **shopping.py** - run this script for a group of agents to conduct online research to compare products and make a recommendation
 
 ## Setup
-You will first need to create an [Azure OpenAI resource](https://portal.azure.com/#create/Microsoft.CognitiveServicesOpenAI) with a GPT-4o model deployment, and update the .env file with the endpoint and key (and the deployment name if you change from the default).  
+You will first need to create an [Azure AI Foundry](https://portal.azure.com/#create/Microsoft.CognitiveServicesOpenAI) resource with a hub and project. Copy the project connection string and update the .env file with it.
 
-To use the Bing Search API, you will also need to create a [Bing resource](https://portal.azure.com/#create/Microsoft.BingSearch) and update the .env file with its key.  
+To use the Bing Grounding API, go to "Connected Resources" in the project blade and add a connection to the Bing resource. Fetch the name of the Bing resource and copy/paste it into the .env file as well.
 
 Finally, use the following commands in a python environment (such as an Anaconda prompt window) to set up your environment. This creates and activates an environment and installs the required packages. For subsequent runs after the initial install, you will only need to activate the environment and then run the python script.
 
