@@ -141,7 +141,7 @@ async def main() -> None:
 
 
     # Define termination condition
-    termination = TextMentionTermination("TERMINATE")
+    termination = TextMentionTermination("TERMINATE", ["orchestrator_agent"])
 
     # Define a team
     agent_team = SelectorGroupChat(
