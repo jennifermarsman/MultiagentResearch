@@ -1,4 +1,6 @@
-autogen-agentchat==0.4.8
-autogen-ext[openai,azure,docker]==0.4.8
+agent-framework[azure-ai]
+agent-framework[azure-openai]
+azure-identity
 python-dotenv
 rich
+requests
