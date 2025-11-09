@@ -1,5 +1,4 @@
-agent-framework[azure-ai]
-agent-framework[azure-openai]
+agent-framework
 azure-identity
 python-dotenv
 rich
