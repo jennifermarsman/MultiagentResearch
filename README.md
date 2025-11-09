@@ -2,7 +2,7 @@
 An exploration of using multiple agents collaborating to perform research
 
 ## Scenarios
-This repo contains two different scenarios, both implemented using multiple agents collaborating using AutoGen 0.4.  
+This repo contains two different scenarios implemented using multiple agents collaborating with **Microsoft Agent Framework**:
 + **journalism_research.py** - run this script for a group of agents to conduct online research to craft a news article
 + **shopping.py** - run this script for a group of agents to conduct online research to compare products and make a recommendation
 
@@ -27,3 +27,16 @@ python journalism_research.py
 conda activate research
 python journalism_research.py
 ```
+
+## Migration to Microsoft Agent Framework
+This codebase has been migrated from AutoGen 0.4 to Microsoft Agent Framework. Key changes include:
+- Updated from `autogen-agentchat` to `agent-framework` packages
+- Agents now use `ChatAgent` from Microsoft Agent Framework
+- Azure OpenAI integration via `AzureOpenAIChatClient`
+- Custom group chat orchestration (MAF doesn't have direct SelectorGroupChat equivalent)
+- Simplified authentication with Azure CLI or API key fallback
+
+### Authentication
+The code supports two authentication methods:
+1. **Azure CLI (Recommended)**: Run `az login` before executing the script
+2. **API Key**: Set `AZURE_OPENAI_API_KEY` in your .env file
